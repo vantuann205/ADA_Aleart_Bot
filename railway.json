@@ -1,6 +1,6 @@
 {
   "build": {
-    "builder": "paketo"
+    "builder": "dockerfile"
   },
   "start": "python bot.py"
 }
