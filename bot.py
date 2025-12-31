@@ -2,26 +2,28 @@ import requests
 import time
 import schedule
 import threading
-from telegram import Bot, Update
+import asyncio
+from telegram import Bot
 from telegram.ext import Application, CommandHandler, ContextTypes
 
 # ================== CẤU HÌNH Ở ĐÂY ==================
-BOT_TOKEN = "8053694015:AAGYuT2Dgu3LqfdFM2xurZRf7fHtsEfn8Vc"          # Thay bằng token bot thật của bạn
-CHAT_ID = 5200218232                       # Chat ID của bạn (đã lấy được)
+BOT_TOKEN = "8053694015:AAGYuT2Dgu3LqfdFM2xurZRf7fHtsEfn8Vc"
+CHAT_ID = 5200218232
 
 # Các mức giá cao (tăng đến) - báo khi giá >= mức này
-HIGH_LEVELS = [0.38 ,0.40, 0.45, 0.50]           # Bạn có thể thêm/bớt/sửa thoải mái
+HIGH_LEVELS = [0.38, 0.40, 0.45, 0.50]
 
-# Các mức giá thấp (giảm về) - báo khi giá <= mức này
-LOW_LEVELS = [0.35, 0.34, 0.33, 0.32, 0.30]  # Sắp xếp từ cao xuống thấp để dễ xử lý
+# Các mức giá thấp (giảm về) - báo khi giá <= mức này  
+LOW_LEVELS = [0.35, 0.34, 0.33, 0.32, 0.30]
 
-CHECK_INTERVAL = 30                        # Kiểm tra mỗi 60 giây (có thể giảm xuống 30 nếu muốn nhanh hơn)
+CHECK_INTERVAL = 30
 # ====================================================
 
+# Khởi tạo bot
 bot = Bot(token=BOT_TOKEN)
 application = Application.builder().token(BOT_TOKEN).build()
 
-# Theo dõi trạng thái từng mức để tránh gửi lặp
+# Theo dõi trạng thái - RESET MỖI LẦN KHỞI ĐỘNG
 high_alert_sent = {level: False for level in HIGH_LEVELS}
 low_alert_sent = {level: False for level in LOW_LEVELS}
 
@@ -32,158 +34,131 @@ def get_ada_price():
         data = response.json()
         return data['cardano']['usd']
     except Exception as e:
-        print(f"Lỗi lấy giá: {e}")
+        print(f"❌ Lỗi lấy giá: {e}")
         return None
 
-# Command handlers
-async def price_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Xử lý lệnh /price để lấy giá ADA hiện tại"""
-    price = get_ada_price()
-    if price is None:
-        await update.message.reply_text("❌ Không thể lấy giá ADA hiện tại. Vui lòng thử lại sau!")
-        return
-    
-    current_price = round(price, 4)
-    message = f"💰 **Giá ADA hiện tại**\n" \
-              f"💵 ${current_price}\n" \
-              f"🕐 Thời gian: {time.strftime('%d/%m/%Y %H:%M:%S')}"
-    
-    await update.message.reply_text(message, parse_mode='Markdown')
-
-async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Xử lý lệnh /start"""
-    message = f"🤖 **Chào mừng đến với ADA Price Bot!**\n\n" \
-              f"📋 **Các lệnh có sẵn:**\n" \
-              f"/price - Xem giá ADA hiện tại\n" \
-              f"/reset - Reset trạng thái thông báo\n" \
-              f"/status - Xem trạng thái bot\n" \
-              f"/start - Hiển thị menu này\n\n" \
-              f"� Bot sẽ t ự động thông báo khi:\n" \
-              f"🚀 Giá tăng vượt: {HIGH_LEVELS}\n" \
-              f"🔥 Giá giảm về: {LOW_LEVELS}"
-    
-    await update.message.reply_text(message, parse_mode='Markdown')
-
-async def reset_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Reset trạng thái thông báo"""
-    global high_alert_sent, low_alert_sent
-    high_alert_sent = {level: False for level in HIGH_LEVELS}
-    low_alert_sent = {level: False for level in LOW_LEVELS}
-    
-    await update.message.reply_text("✅ Đã reset trạng thái thông báo! Bot sẽ thông báo lại khi giá chạm các mức.")
-
-async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Xem trạng thái bot"""
-    price = get_ada_price()
-    if price is None:
-        await update.message.reply_text("❌ Không thể lấy giá ADA hiện tại")
-        return
-    
-    current_price = round(price, 4)
-    
-    high_status = "\n".join([f"${level}: {'✅ Đã báo' if high_alert_sent[level] else '⏳ Chưa báo'}" for level in HIGH_LEVELS])
-    low_status = "\n".join([f"${level}: {'✅ Đã báo' if low_alert_sent[level] else '⏳ Chưa báo'}" for level in LOW_LEVELS])
-    
-    message = f"📊 **Trạng thái Bot**\n\n" \
-              f"💰 Giá hiện tại: ${current_price}\n\n" \
-              f"🚀 **Mức tăng:**\n{high_status}\n\n" \
-              f"🔥 **Mức giảm:**\n{low_status}\n\n" \
-              f"⏰ Kiểm tra mỗi {CHECK_INTERVAL} giây"
-    
-    await update.message.reply_text(message, parse_mode='Markdown')
+def send_telegram_message(message):
+    """Gửi tin nhắn Telegram đồng bộ"""
+    try:
+        # Tạo event loop mới cho thread này
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
+        async def send_msg():
+            await bot.send_message(chat_id=CHAT_ID, text=message)
+        
+        loop.run_until_complete(send_msg())
+        loop.close()
+        return True
+    except Exception as e:
+        print(f"❌ Lỗi gửi tin nhắn: {e}")
+        return False
 
 def check_price_and_alert():
     global high_alert_sent, low_alert_sent
     
     price = get_ada_price()
     if price is None:
-        print("❌ Không thể lấy giá ADA")
+        print("❌ Không lấy được giá")
         return
     
     current_price = round(price, 4)
-    print(f"[{time.strftime('%H:%M:%S')}] Giá ADA hiện tại: ${current_price}")
-    print(f"Debug - High alerts: {high_alert_sent}")
-    print(f"Debug - Low alerts: {low_alert_sent}")
-
-    message = None
-
-    # Kiểm tra các mức cao (tăng đến)
-    for level in sorted(HIGH_LEVELS):
-        if price >= level and not high_alert_sent[level]:
-            message = f"🚀 ADA ĐÃ TĂNG VƯỢT MỨC ${level}!\n" \
-                      f"Giá hiện tại: ${current_price}\n" \
-                      f"Thời gian: {time.strftime('%d/%m/%Y %H:%M:%S')}"
-            high_alert_sent[level] = True
-            # Reset các mức thấp nếu giá đang tăng mạnh
-            for low_level in LOW_LEVELS:
-                low_alert_sent[low_level] = False
-            print(f"🚀 Sẽ gửi thông báo tăng: ${level}")
-            break  # Chỉ gửi 1 thông báo cho mức cao nhất đạt được
-
-    # Kiểm tra các mức thấp (giảm về)
-    if not message:  # Chỉ kiểm tra mức thấp nếu chưa gửi báo cáo tăng
-        for level in sorted(LOW_LEVELS, reverse=True):  # Từ cao xuống thấp
-            if price <= level and not low_alert_sent[level]:
-                message = f"🔥 ADA ĐÃ GIẢM VỀ MỨC ${level}!\n" \
-                          f"Giá hiện tại: ${current_price}\n" \
-                          f"Thời gian: {time.strftime('%d/%m/%Y %H:%M:%S')}"
+    print(f"[{time.strftime('%H:%M:%S')}] Giá ADA: ${current_price}")
+    
+    # Kiểm tra mức GIẢM trước (quan trọng hơn)
+    for level in sorted(LOW_LEVELS, reverse=True):
+        if price <= level and not low_alert_sent[level]:
+            message = f"🔥 ADA GIẢM VỀ ${level}!\n💰 Giá: ${current_price}\n🕐 {time.strftime('%d/%m/%Y %H:%M:%S')}"
+            
+            if send_telegram_message(message):
                 low_alert_sent[level] = True
-                # Reset các mức cao nếu giá đang giảm
+                print(f"✅ Đã gửi thông báo giảm: ${level}")
+                
+                # Reset tất cả mức cao khi giá giảm
                 for high_level in HIGH_LEVELS:
                     high_alert_sent[high_level] = False
-                print(f"🔥 Sẽ gửi thông báo giảm: ${level}")
-                break  # Chỉ gửi 1 thông báo cho mức thấp nhất đạt được
+            return
+    
+    # Kiểm tra mức TĂNG
+    for level in sorted(HIGH_LEVELS):
+        if price >= level and not high_alert_sent[level]:
+            message = f"🚀 ADA TĂNG VƯỢT ${level}!\n💰 Giá: ${current_price}\n🕐 {time.strftime('%d/%m/%Y %H:%M:%S')}"
+            
+            if send_telegram_message(message):
+                high_alert_sent[level] = True
+                print(f"✅ Đã gửi thông báo tăng: ${level}")
+                
+                # Reset tất cả mức thấp khi giá tăng
+                for low_level in LOW_LEVELS:
+                    low_alert_sent[low_level] = False
+            return
 
-    if message:
-        try:
-            # Sử dụng async bot để gửi tin nhắn
-            import asyncio
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            loop.run_until_complete(send_alert_message(message))
-            loop.close()
-            print("✅ Đã gửi thông báo Telegram!")
-        except Exception as e:
-            print(f"❌ Lỗi gửi tin nhắn: {e}")
-    else:
-        print("ℹ️ Không có thông báo nào cần gửi")
+# =============== COMMAND HANDLERS ===============
+async def price_command(update, context):
+    price = get_ada_price()
+    if price is None:
+        await update.message.reply_text("❌ Không lấy được giá ADA!")
+        return
+    
+    current_price = round(price, 4)
+    message = f"💰 Giá ADA: ${current_price}\n🕐 {time.strftime('%d/%m/%Y %H:%M:%S')}"
+    await update.message.reply_text(message)
 
-async def send_alert_message(message):
-    """Gửi tin nhắn thông báo bất đồng bộ"""
-    try:
-        await bot.send_message(chat_id=CHAT_ID, text=message)
-    except Exception as e:
-        print(f"❌ Lỗi trong send_alert_message: {e}")
+async def reset_command(update, context):
+    global high_alert_sent, low_alert_sent
+    high_alert_sent = {level: False for level in HIGH_LEVELS}
+    low_alert_sent = {level: False for level in LOW_LEVELS}
+    await update.message.reply_text("✅ Đã reset! Bot sẽ thông báo lại.")
 
-# Thêm command handlers
-application.add_handler(CommandHandler("start", start_command))
+async def status_command(update, context):
+    price = get_ada_price()
+    if price is None:
+        await update.message.reply_text("❌ Không lấy được giá!")
+        return
+    
+    current_price = round(price, 4)
+    
+    high_status = []
+    for level in HIGH_LEVELS:
+        status = "✅" if high_alert_sent[level] else "⏳"
+        high_status.append(f"${level}: {status}")
+    
+    low_status = []
+    for level in LOW_LEVELS:
+        status = "✅" if low_alert_sent[level] else "⏳"
+        low_status.append(f"${level}: {status}")
+    
+    message = f"📊 Giá hiện tại: ${current_price}\n\n🚀 Mức tăng:\n" + "\n".join(high_status) + "\n\n🔥 Mức giảm:\n" + "\n".join(low_status)
+    await update.message.reply_text(message)
+
+# Đăng ký commands
 application.add_handler(CommandHandler("price", price_command))
 application.add_handler(CommandHandler("reset", reset_command))
 application.add_handler(CommandHandler("status", status_command))
 
 def price_monitoring():
-    """Chạy monitoring giá trong thread riêng"""
-    print("Bot đang khởi động...")
+    """Thread riêng cho monitoring"""
+    print("🚀 Bắt đầu monitoring giá ADA...")
+    print(f"📊 Mức tăng: {HIGH_LEVELS}")
+    print(f"📉 Mức giảm: {LOW_LEVELS}")
+    print(f"⏰ Kiểm tra mỗi {CHECK_INTERVAL}s")
+    
+    # Kiểm tra ngay lần đầu
     check_price_and_alert()
     
-    print(f"Bot đang chạy! Theo dõi giá ADA mỗi {CHECK_INTERVAL} giây...")
-    print(f"Mức cao báo tăng: {HIGH_LEVELS}")
-    print(f"Mức thấp báo giảm: {LOW_LEVELS}")
-    
-    # Lập lịch kiểm tra định kỳ
+    # Lập lịch
     schedule.every(CHECK_INTERVAL).seconds.do(check_price_and_alert)
     
-    # Vòng lặp monitoring
     while True:
         schedule.run_pending()
         time.sleep(1)
 
 if __name__ == '__main__':
-    # Chạy price monitoring trong thread riêng
+    # Chạy monitoring trong thread riêng
     monitoring_thread = threading.Thread(target=price_monitoring, daemon=True)
     monitoring_thread.start()
     
-    # Chạy bot commands
-    print("🤖 Bot Telegram đã sẵn sàng!")
-    print("📋 Các lệnh có sẵn: /start, /price, /reset, /status")
+    # Chạy bot
+    print("🤖 Bot Telegram sẵn sàng!")
+    print("📋 Lệnh: /price /reset /status")
     application.run_polling()
