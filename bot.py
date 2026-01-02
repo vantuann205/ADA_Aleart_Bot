@@ -109,9 +109,10 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def price_monitoring():
     """Price monitoring loop running in separate thread"""
-    print("🚀 Bat dau monitoring gia ADA...")
-    print(f"📊 Muc tang: {HIGH_LEVELS}")
-    print(f"📉 Muc giam: {LOW_LEVELS}")
+    print("🚀 Starting price monitoring...")
+    print(f"📊 High levels: {HIGH_LEVELS}")
+    print(f"📉 Low levels: {LOW_LEVELS}")
+    print(f"⏱️  Check interval: {CHECK_INTERVAL} seconds\n")
     
     schedule.every(CHECK_INTERVAL).seconds.do(check_price_and_alert)
     
@@ -120,13 +121,22 @@ def price_monitoring():
             schedule.run_pending()
             time.sleep(1)
         except Exception as e:
-            print(f"Loi monitoring: {e}")
+            print(f"⚠️  Monitoring error (will retry): {e}")
             time.sleep(5)
 
 
 async def run_bot_polling():
     """Main async bot runner with polling"""
     global application
+    
+    print("🧹 Cleaning up old bot updates...")
+    try:
+        # Get all pending updates to clear offset - this forces Telegram to forget old connections
+        updates = await bot.get_updates(offset=-1, allowed_updates=Update.ALL_TYPES, timeout=1)
+        if updates:
+            print(f"   Cleared {len(updates)} old updates")
+    except Exception as e:
+        print(f"   (cleanup note: {type(e).__name__})")
     
     application = Application.builder().token(BOT_TOKEN).build()
     
@@ -138,24 +148,72 @@ async def run_bot_polling():
     await application.initialize()
     await application.start()
     
+    print("⏳ Waiting for old connections to fully timeout (15 seconds)...")
+    await asyncio.sleep(15)  # CRITICAL: give old instances maximum time to die
+    
     print("🤖 Starting polling (only one instance allowed)...")
     print("⚠️  Make sure NO other bot instances are running!")
     
+    max_retries = 5
+    retry_count = 0
+    
+    while retry_count < max_retries and is_running:
+        try:
+            # Start polling with aggressive cleanup settings
+            await application.updater.start_polling(
+                allowed_updates=Update.ALL_TYPES,
+                drop_pending_updates=True,
+                poll_interval=1.0,
+                timeout=15,
+                read_timeout=15
+            )
+            print("✅ Polling started successfully")
+            
+            # Keep polling until shutdown
+            while is_running:
+                await asyncio.sleep(1)
+                
+        except Exception as e:
+            error_str = str(e)
+            if "Conflict" in error_str and retry_count < max_retries - 1:
+                retry_count += 1
+                print(f"\n⚠️  Conflict detected (attempt {retry_count}/{max_retries})")
+                print(f"   Old instance still running - waiting 20 seconds for forced disconnect...")
+                
+                # Stop current polling
+                try:
+                    await application.updater.stop()
+                    print("   Stopped current polling")
+                except Exception as stop_err:
+                    print(f"   (stop error: {type(stop_err).__name__})")
+                
+                # Wait for Telegram server to timeout old connection (30 seconds)
+                await asyncio.sleep(20)
+                
+                # Reset offset to clear connection state
+                try:
+                    await bot.get_updates(offset=-1, timeout=1)
+                    print("   Reset connection state")
+                except:
+                    pass
+                
+                # Reinitialize application
+                try:
+                    await application.start()
+                    print("   Reinitializing bot for retry...")
+                except Exception as init_err:
+                    print(f"   (init error: {type(init_err).__name__})")
+            else:
+                print(f"\n❌ Fatal error: {error_str}")
+                raise
+    
+    # Cleanup
     try:
-        # This is the key: use proper polling with drop_pending_updates
-        await application.updater.start_polling(
-            allowed_updates=Update.ALL_TYPES,
-            drop_pending_updates=True
-        )
-        print("✅ Polling started successfully")
-        
-        # Keep polling until shutdown
-        while is_running:
-            await asyncio.sleep(1)
-    finally:
         await application.updater.stop()
         await application.stop()
         await application.shutdown()
+    except:
+        pass
 
 
 def signal_handler(sig, frame):
@@ -170,28 +228,39 @@ def main():
     """Main entry point"""
     global is_running
     
+    print("\n" + "="*60)
+    print("🚀 ADA Price Alert Bot Starting...")
+    print("="*60)
+    
     # Set up signal handlers
     import signal
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
     
+    print("\n🧹 Step 1: Cleaning up any old bot instances...")
+    print("   (waiting 3 seconds for Railway cleanup)")
+    time.sleep(3)
+    
     # Start monitoring thread
+    print("\n⚙️  Step 2: Starting price monitoring thread...")
     monitoring_thread = threading.Thread(target=price_monitoring, daemon=False)
     monitoring_thread.start()
     print("✅ Monitoring thread started")
     
+    print("\n🤖 Step 3: Starting Telegram bot polling...")
     try:
         # Run the async bot
         asyncio.run(run_bot_polling())
     except KeyboardInterrupt:
-        print("\n🛑 Bot dung lai")
+        print("\n🛑 Bot stopped by user")
     except Exception as e:
-        print(f"❌ Loi: {e}")
+        print(f"\n❌ Bot error: {e}")
         import traceback
         traceback.print_exc()
     finally:
         is_running = False
-        print("👋 Bot tat")
+        print("\n👋 Bot shutdown complete")
+        print("="*60)
 
 
 if __name__ == '__main__':

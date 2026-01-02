@@ -3,6 +3,8 @@
     "builder": "dockerfile"
   },
   "deploy": {
-    "startCommand": "python bot.py"
+    "startCommand": "python -u bot.py",
+    "restartPolicyMaxRetries": 5,
+    "restartPolicyType": "on_failure"
   }
 }

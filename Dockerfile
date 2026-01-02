@@ -9,7 +9,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application
 COPY . .
 
+# Make startup script executable
+COPY startup.sh /app/startup.sh
+RUN chmod +x /app/startup.sh
+
 # Run bot with proper unbuffered output
 ENV PYTHONUNBUFFERED=1
 
-CMD ["python", "-u", "bot.py"]
+# Use startup script to ensure clean process
+CMD ["/app/startup.sh"]
