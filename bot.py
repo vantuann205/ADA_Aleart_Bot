@@ -164,8 +164,7 @@ async def run_bot_polling():
                 allowed_updates=Update.ALL_TYPES,
                 drop_pending_updates=True,
                 poll_interval=1.0,
-                timeout=15,
-                read_timeout=15
+                timeout=15
             )
             print("✅ Polling started successfully")
             
