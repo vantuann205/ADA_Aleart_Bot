@@ -2,5 +2,7 @@
   "build": {
     "builder": "dockerfile"
   },
-  "start": "python bot.py"
+  "deploy": {
+    "startCommand": "python bot.py"
+  }
 }

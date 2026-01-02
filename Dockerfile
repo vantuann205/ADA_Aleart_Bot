@@ -7,4 +7,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-CMD ["python", "bot.py"]
+EXPOSE 8000
+
+CMD ["python", "-u", "bot.py"]
