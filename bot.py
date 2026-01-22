@@ -9,6 +9,7 @@ import sys
 from datetime import datetime, timezone, timedelta
 from telegram import Bot, Update
 from telegram.ext import Application, CommandHandler, ContextTypes
+from http.server import HTTPServer, BaseHTTPRequestHandler
 import os
 
 BOT_TOKEN = "8053694015:AAGYuT2Dgu3LqfdFM2xurZRf7fHtsEfn8Vc"
@@ -23,6 +24,51 @@ bot = Bot(token=BOT_TOKEN)
 previous_price = None
 is_running = True
 application = None
+
+
+class HealthHandler(BaseHTTPRequestHandler):
+    """Simple HTTP handler for health checks"""
+    def do_GET(self):
+        if self.path == '/health':
+            self.send_response(200)
+            self.send_header('Content-type', 'text/plain')
+            self.end_headers()
+            self.wfile.write(b'OK - Bot is running')
+        elif self.path == '/':
+            self.send_response(200)
+            self.send_header('Content-type', 'text/html')
+            self.end_headers()
+            status = "Running" if is_running else "Stopped"
+            current_time = get_utc7_time()
+            html = f"""
+            <html>
+            <head><title>ADA Alert Bot</title></head>
+            <body>
+                <h1>🤖 ADA Price Alert Bot</h1>
+                <p><strong>Status:</strong> {status}</p>
+                <p><strong>Time (UTC+7):</strong> {current_time}</p>
+                <p><strong>Current ADA Price:</strong> ${get_ada_price() or 'Loading...'}</p>
+                <p><strong>High Alert Levels:</strong> {HIGH_LEVELS}</p>
+                <p><strong>Low Alert Levels:</strong> {LOW_LEVELS}</p>
+            </body>
+            </html>
+            """
+            self.wfile.write(html.encode())
+        else:
+            self.send_response(404)
+            self.end_headers()
+    
+    def log_message(self, format, *args):
+        # Suppress HTTP server logs
+        pass
+
+
+def run_http_server():
+    """Run HTTP server for health checks"""
+    port = int(os.environ.get('PORT', 8080))
+    server = HTTPServer(('0.0.0.0', port), HealthHandler)
+    print(f"🌐 HTTP server started on port {port}")
+    server.serve_forever()
 
 
 def get_ada_price():
@@ -115,6 +161,18 @@ def price_monitoring():
     print(f"⏱️  Check interval: {CHECK_INTERVAL} seconds\n")
     
     schedule.every(CHECK_INTERVAL).seconds.do(check_price_and_alert)
+    
+    # Self-ping to keep alive (every 10 minutes)
+    def self_ping():
+        try:
+            app_name = os.environ.get('FLY_APP_NAME', 'ada-aleart-bot-yhadcq')
+            url = f"https://{app_name}.fly.dev/health"
+            requests.get(url, timeout=5)
+            print(f"[{time.strftime('%H:%M:%S')}] 🏓 Keep-alive ping sent")
+        except Exception as e:
+            print(f"[{time.strftime('%H:%M:%S')}] ⚠️ Keep-alive ping failed: {e}")
+    
+    schedule.every(10).minutes.do(self_ping)
     
     while is_running:
         try:
@@ -240,13 +298,19 @@ def main():
     print("   (waiting 3 seconds for Railway cleanup)")
     time.sleep(3)
     
+    # Start HTTP server thread
+    print("\n🌐 Step 2: Starting HTTP server for health checks...")
+    http_thread = threading.Thread(target=run_http_server, daemon=True)
+    http_thread.start()
+    print("✅ HTTP server started")
+    
     # Start monitoring thread
-    print("\n⚙️  Step 2: Starting price monitoring thread...")
+    print("\n⚙️  Step 3: Starting price monitoring thread...")
     monitoring_thread = threading.Thread(target=price_monitoring, daemon=False)
     monitoring_thread.start()
     print("✅ Monitoring thread started")
     
-    print("\n🤖 Step 3: Starting Telegram bot polling...")
+    print("\n🤖 Step 4: Starting Telegram bot polling...")
     try:
         # Run the async bot
         asyncio.run(run_bot_polling())

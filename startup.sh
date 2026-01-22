@@ -1,21 +1,15 @@
 #!/bin/bash
-# Railway startup script - Kill any zombie processes and start bot
 
-# Function to kill zombie Python processes
-kill_zombies() {
-    echo "🧹 Checking for zombie bot processes..."
-    pkill -f "python.*bot.py" 2>/dev/null || true
-    sleep 2
-}
+echo "🚀 Starting ADA Alert Bot..."
 
-# Clean environment
-export PYTHONUNBUFFERED=1
+# Kill any existing Python processes (cleanup)
+pkill -f python3 2>/dev/null || true
+pkill -f bot.py 2>/dev/null || true
 
-# Kill any existing processes
-kill_zombies
+# Wait a moment for cleanup
+sleep 2
 
-# Wait to ensure full cleanup
-sleep 3
+echo "🐍 Starting Python bot..."
 
-echo "🚀 Starting bot..."
-exec python -u bot.py
+# Start the bot with proper error handling
+exec python3 -u bot.py
