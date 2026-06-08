@@ -72,8 +72,8 @@ def run_http_server():
 
 def get_ada_price():
     try:
-        # Sử dụng Binance API thay vì CoinGecko vì CoinGecko hay chặn IP của Render/Cloud
-        url = "https://api.binance.com/api/v3/ticker/price?symbol=ADAUSDT"
+        # Sử dụng API của Coinbase hoặc Binance.US vì Binance quốc tế chặn IP của Mỹ (nơi đặt máy chủ Render)
+        url = "https://api.binance.us/api/v3/ticker/price?symbol=ADAUSDT"
         response = requests.get(url, timeout=10)
         
         # Nếu API trả về lỗi (4xx, 5xx), nó sẽ văng exception để in ra lỗi chi tiết
