@@ -73,10 +73,15 @@ def run_http_server():
 
 def get_ada_price():
     try:
-        url = "https://api.coingecko.com/api/v3/simple/price?ids=cardano&vs_currencies=usd"
+        # Sử dụng Binance API thay vì CoinGecko vì CoinGecko hay chặn IP của Render/Cloud
+        url = "https://api.binance.com/api/v3/ticker/price?symbol=ADAUSDT"
         response = requests.get(url, timeout=10)
+        
+        # Nếu API trả về lỗi (4xx, 5xx), nó sẽ văng exception để in ra lỗi chi tiết
+        response.raise_for_status()
+        
         data = response.json()
-        return data['cardano']['usd']
+        return float(data['price'])
     except Exception as e:
         print(f"Loi lay gia: {e}")
         return None
