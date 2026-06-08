@@ -165,10 +165,11 @@ def price_monitoring():
     # Self-ping to keep alive (every 10 minutes)
     def self_ping():
         try:
-            app_name = os.environ.get('FLY_APP_NAME', 'ada-aleart-bot-yhadcq')
-            url = f"https://{app_name}.fly.dev/health"
+            # Use Render's environment variable if available, otherwise fallback to the provided URL
+            base_url = os.environ.get('RENDER_EXTERNAL_URL', 'https://ada-aleart-bot.onrender.com')
+            url = f"{base_url}/health"
             requests.get(url, timeout=5)
-            print(f"[{time.strftime('%H:%M:%S')}] 🏓 Keep-alive ping sent")
+            print(f"[{time.strftime('%H:%M:%S')}] 🏓 Keep-alive ping sent to {url}")
         except Exception as e:
             print(f"[{time.strftime('%H:%M:%S')}] ⚠️ Keep-alive ping failed: {e}")
     
