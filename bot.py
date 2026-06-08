@@ -15,8 +15,8 @@ import os
 BOT_TOKEN = "8053694015:AAGYuT2Dgu3LqfdFM2xurZRf7fHtsEfn8Vc"
 CHAT_ID = 5200218232
 
-HIGH_LEVELS = [0.38, 0.40, 0.45, 0.50]
-LOW_LEVELS = [0.35, 0.34, 0.33, 0.32, 0.30]
+# Bot sẽ thông báo mỗi khi giá thay đổi qua mốc 0.01 (VD: 0.16 -> 0.17 hoặc 0.17 -> 0.16)
+ALERT_STEP = 0.01
 CHECK_INTERVAL = 30
 
 # Global state
@@ -48,8 +48,7 @@ class HealthHandler(BaseHTTPRequestHandler):
                 <p><strong>Status:</strong> {status}</p>
                 <p><strong>Time (UTC+7):</strong> {current_time}</p>
                 <p><strong>Current ADA Price:</strong> ${get_ada_price() or 'Loading...'}</p>
-                <p><strong>High Alert Levels:</strong> {HIGH_LEVELS}</p>
-                <p><strong>Low Alert Levels:</strong> {LOW_LEVELS}</p>
+                <p><strong>Alert Settings:</strong> Thong bao moi khi gia bien dong ${ALERT_STEP}</p>
             </body>
             </html>
             """
@@ -128,16 +127,26 @@ def check_price_and_alert():
     print(f"[{time.strftime('%H:%M:%S')}] Gia ADA: ${current_price}")
     
     if previous_price is not None:
-        for level in LOW_LEVELS:
-            if previous_price > level and current_price <= level:
-                message = f"🔥 ADA GIAM VE ${level}!\n💰 Gia: ${current_price}\n🕐 {get_utc7_time()}"
-                send_telegram_message(message)
+        # Tính toán mốc giá dựa trên ALERT_STEP (0.01)
+        # Dùng round(, 4) trước khi int để tránh lỗi độ chính xác số thực thập phân của python
+        prev_step_val = int(round(previous_price / ALERT_STEP, 4))
+        curr_step_val = int(round(current_price / ALERT_STEP, 4))
         
-        for level in HIGH_LEVELS:
-            if previous_price < level and current_price >= level:
-                message = f"🚀 ADA TANG VUOT ${level}!\n💰 Gia: ${current_price}\n🕐 {get_utc7_time()}"
+        if curr_step_val > prev_step_val:
+            # Giá tăng qua mốc
+            for step_val in range(prev_step_val + 1, curr_step_val + 1):
+                level = step_val * ALERT_STEP
+                message = f"🚀 ADA TANG VUOT ${level:.2f}!\n💰 Gia hien tai: ${current_price}\n🕐 {get_utc7_time()}"
                 send_telegram_message(message)
-                print(f"✅ Thong bao tang: ${level}")
+                print(f"✅ Thong bao tang: ${level:.2f}")
+                
+        elif curr_step_val < prev_step_val:
+            # Giá giảm qua mốc
+            for step_val in range(prev_step_val, curr_step_val, -1):
+                level = step_val * ALERT_STEP
+                message = f"🔥 ADA GIAM XUONG DUOI ${level:.2f}!\n💰 Gia hien tai: ${current_price}\n🕐 {get_utc7_time()}"
+                send_telegram_message(message)
+                print(f"✅ Thong bao giam: ${level:.2f}")
     
     previous_price = current_price
 
@@ -154,15 +163,14 @@ async def price_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    message = f"🤖 ADA Price Alert Bot\n\n📋 Lenh co san:\n/price - Xem gia ADA hien tai\n\n🔔 Tu dong thong bao khi:\n🚀 Tang vuot: {HIGH_LEVELS}\n🔥 Giam ve: {LOW_LEVELS}"
+    message = f"🤖 ADA Price Alert Bot\n\n📋 Lenh co san:\n/price - Xem gia ADA hien tai\n\n🔔 Tu dong thong bao khi gia bien dong moi ${ALERT_STEP} (VD: 0.16 -> 0.17 hoac 0.17 -> 0.16)"
     await update.message.reply_text(message)
 
 
 def price_monitoring():
     """Price monitoring loop running in separate thread"""
     print("🚀 Starting price monitoring...")
-    print(f"📊 High levels: {HIGH_LEVELS}")
-    print(f"📉 Low levels: {LOW_LEVELS}")
+    print(f"📊 Alert step: ${ALERT_STEP}")
     print(f"⏱️  Check interval: {CHECK_INTERVAL} seconds\n")
     
     schedule.every(CHECK_INTERVAL).seconds.do(check_price_and_alert)
