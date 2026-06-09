@@ -12,7 +12,7 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import os
 
-BOT_TOKEN = "8053694015:AAGYuT2Dgu3LqfdFM2xurZRf7fHtsEfn8Vc"
+BOT_TOKEN = "8053694015:AAH5FKKMIBHYVptrCyawTN-F38SlZcPXE1s"
 CHAT_ID = 5200218232
 
 # Bot sẽ thông báo mỗi khi giá thay đổi qua mốc 0.01 (VD: 0.16 -> 0.17 hoặc 0.17 -> 0.16)
