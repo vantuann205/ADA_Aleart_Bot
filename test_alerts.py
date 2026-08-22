@@ -1,8 +1,9 @@
 import os
 import re
 import unittest
+import asyncio
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 os.environ["BOT_TOKEN"] = "123456:TEST_TOKEN"
 os.environ["CHAT_ID"] = "1"
@@ -38,6 +39,11 @@ class AlertTests(unittest.TestCase):
             bot.check_price_and_alert()
 
         self.assertEqual(bot.previous_prices["BTC"], 78050)
+
+    def test_delivery_check_stops_startup_when_chat_cannot_receive_messages(self):
+        with patch.object(bot, "send_telegram_message_async", new=AsyncMock(return_value=False)):
+            with self.assertRaisesRegex(RuntimeError, "CHAT_ID"):
+                asyncio.run(bot.verify_telegram_delivery())
 
 
 if __name__ == "__main__":

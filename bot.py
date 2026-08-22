@@ -113,6 +113,12 @@ async def send_telegram_message_async(message):
         return False
 
 
+async def verify_telegram_delivery():
+    if not await send_telegram_message_async("🤖 Crypto Alert Bot is online. BTC/ETH monitoring started."):
+        raise RuntimeError("Telegram delivery check failed: verify CHAT_ID and send /start to the bot")
+    print("✅ Telegram alert delivery verified")
+
+
 def send_telegram_message(message):
     """Send message from synchronous context"""
     try:
@@ -252,6 +258,7 @@ async def run_bot_polling():
     print("🤖 Initializing bot...")
     await application.initialize()
     await application.start()
+    await verify_telegram_delivery()
 
     monitoring_thread = threading.Thread(target=price_monitoring, daemon=True)
     monitoring_thread.start()
