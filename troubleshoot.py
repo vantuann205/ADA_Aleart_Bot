@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Troubleshooter for Railway ADA Bot
+Troubleshooter for Render crypto alert bot
 Diagnose common issues and provide solutions
 """
 
@@ -9,6 +9,10 @@ import requests
 import sys
 import os
 from datetime import datetime
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
 
 class Colors:
     GREEN = '\033[92m'
@@ -31,8 +35,8 @@ def print_info(msg):
 
 def check_bot_token(token):
     """Verify bot token format"""
-    if not token or token == "8053694015:AAGYuT2Dgu3LqfdFM2xurZRf7fHtsEfn8Vc":
-        print_warning("Using default/dummy bot token")
+    if not token:
+        print_warning("BOT_TOKEN is not set")
         return False
     if ':' not in token or len(token) < 20:
         print_error("Invalid bot token format")
@@ -43,8 +47,8 @@ def check_bot_token(token):
 def check_chat_id(chat_id):
     """Verify chat ID"""
     try:
-        if not chat_id or chat_id == 5200218232:
-            print_warning("Using default/dummy chat ID")
+        if not chat_id:
+            print_warning("CHAT_ID is not set")
             return False
         if isinstance(chat_id, str):
             int(chat_id)
@@ -54,23 +58,21 @@ def check_chat_id(chat_id):
         print_error("Chat ID must be numeric")
         return False
 
-def check_coingecko_api():
-    """Test CoinGecko API availability"""
+def check_price_api():
+    """Test Coinbase price API availability"""
     try:
-        url = "https://api.coingecko.com/api/v3/simple/price?ids=cardano&vs_currencies=usd"
-        response = requests.get(url, timeout=5)
-        if response.status_code == 200:
-            price = response.json()['cardano']['usd']
-            print_success(f"CoinGecko API OK (ADA: ${price:.4f})")
-            return True
-        else:
-            print_error(f"CoinGecko API returned {response.status_code}")
-            return False
+        for symbol in ("BTC", "ETH"):
+            url = f"https://api.coinbase.com/v2/prices/{symbol}-USD/spot"
+            response = requests.get(url, timeout=5)
+            response.raise_for_status()
+            price = float(response.json()["data"]["amount"])
+            print_success(f"Coinbase API OK ({symbol}: ${price:,.2f})")
+        return True
     except requests.exceptions.Timeout:
-        print_error("CoinGecko API timeout")
+        print_error("Coinbase API timeout")
         return False
     except Exception as e:
-        print_error(f"CoinGecko API error: {e}")
+        print_error(f"Coinbase API error: {e}")
         return False
 
 def check_telegram_bot(token):
@@ -98,18 +100,18 @@ def check_requirements():
     """Verify all dependencies installed"""
     required = ['requests', 'telegram', 'schedule']
     missing = []
-    
+
     for package in required:
         try:
             __import__(package)
         except ImportError:
             missing.append(package)
-    
+
     if missing:
         print_error(f"Missing packages: {', '.join(missing)}")
         print_info("Install with: pip install -r requirements.txt")
         return False
-    
+
     print_success("All dependencies installed")
     return True
 
@@ -139,29 +141,16 @@ def check_network():
         return False
 
 def main():
-    print(f"\n{Colors.BLUE}🔍 ADA Bot Troubleshooter{Colors.END}")
+    print(f"\n{Colors.BLUE}🔍 Crypto Bot Troubleshooter{Colors.END}")
     print("=" * 50)
     print(f"Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-    
-    # Read config from bot.py
-    try:
-        with open('bot.py', 'r') as f:
-            bot_content = f.read()
-            # Extract token
-            import re
-            token_match = re.search(r'BOT_TOKEN = "([^"]+)"', bot_content)
-            chat_id_match = re.search(r'CHAT_ID = (\d+)', bot_content)
-            
-            bot_token = token_match.group(1) if token_match else None
-            chat_id = int(chat_id_match.group(1)) if chat_id_match else None
-    except:
-        print_warning("Could not read bot.py config")
-        bot_token = None
-        chat_id = None
-    
+
+    bot_token = os.environ.get("BOT_TOKEN")
+    chat_id = os.environ.get("CHAT_ID")
+
     # Run checks
     print("📋 Running diagnostics...\n")
-    
+
     results = {
         "Network": check_network(),
         "Bot File": check_bot_file(),
@@ -169,19 +158,19 @@ def main():
         "Bot Token": check_bot_token(bot_token) if bot_token else False,
         "Chat ID": check_chat_id(chat_id) if chat_id else False,
         "Telegram API": check_telegram_bot(bot_token) if bot_token else False,
-        "CoinGecko API": check_coingecko_api(),
+        "Coinbase API": check_price_api(),
     }
-    
+
     # Summary
     print("\n" + "=" * 50)
     print("📊 SUMMARY:")
     passed = sum(1 for v in results.values() if v)
     total = len(results)
     print(f"Passed: {passed}/{total}\n")
-    
+
     if all(results.values()):
         print_success("All checks passed! ✨")
-        print_info("You can deploy to Railway")
+        print_info("You can deploy to Render")
         return 0
     else:
         print_warning("Some checks failed")
@@ -190,7 +179,7 @@ def main():
             if not result:
                 print(f"  • {name}")
         print("\n💡 Tips:")
-        print("  1. Check your BOT_TOKEN and CHAT_ID in bot.py")
+        print("  1. Check BOT_TOKEN and CHAT_ID in your environment")
         print("  2. Make sure network connection is working")
         print("  3. Install dependencies: pip install -r requirements.txt")
         print("  4. Run test_setup.py for more details")

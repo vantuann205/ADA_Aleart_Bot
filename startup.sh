@@ -1,6 +1,6 @@
 #!/bin/bash
 
-echo "🚀 Starting ADA Alert Bot..."
+echo "🚀 Starting Crypto Alert Bot..."
 
 # Kill any existing Python processes (cleanup)
 pkill -f python3 2>/dev/null || true
