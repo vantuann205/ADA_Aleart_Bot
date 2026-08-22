@@ -169,10 +169,14 @@ def check_price_and_alert():
         previous_price = previous_prices.get(symbol)
         if previous_price is not None:
             for alert in build_alert_messages(symbol, config["step"], previous_price, current_price):
-                send_telegram_message(alert["message"])
+                if not send_telegram_message(alert["message"]):
+                    print(f"⚠️ Khong gui duoc thong bao {symbol}; se thu lai")
+                    break
                 print(f"✅ Thong bao {symbol}: ${alert['level']:,.0f}")
-
-        previous_prices[symbol] = current_price
+            else:
+                previous_prices[symbol] = current_price
+        else:
+            previous_prices[symbol] = current_price
 
 
 async def price_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -200,6 +204,7 @@ def price_monitoring():
     print("📊 Alert steps: BTC $1,000 | ETH $100")
     print(f"⏱️  Check interval: {CHECK_INTERVAL} seconds\n")
 
+    check_price_and_alert()
     schedule.every(CHECK_INTERVAL).seconds.do(check_price_and_alert)
 
     # Self-ping to keep alive (every 10 minutes)
@@ -247,6 +252,10 @@ async def run_bot_polling():
     print("🤖 Initializing bot...")
     await application.initialize()
     await application.start()
+
+    monitoring_thread = threading.Thread(target=price_monitoring, daemon=True)
+    monitoring_thread.start()
+    print("✅ Monitoring thread started")
 
     print("⏳ Waiting for old connections to fully timeout (15 seconds)...")
     await asyncio.sleep(15)  # CRITICAL: give old instances maximum time to die
@@ -346,13 +355,7 @@ def main():
     http_thread.start()
     print("✅ HTTP server started")
 
-    # Start monitoring thread
-    print("\n⚙️  Step 3: Starting price monitoring thread...")
-    monitoring_thread = threading.Thread(target=price_monitoring, daemon=False)
-    monitoring_thread.start()
-    print("✅ Monitoring thread started")
-
-    print("\n🤖 Step 4: Starting Telegram bot polling...")
+    print("\n🤖 Step 3: Starting Telegram bot polling...")
     try:
         # Run the async bot
         asyncio.run(run_bot_polling())

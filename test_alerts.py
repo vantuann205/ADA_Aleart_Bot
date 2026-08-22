@@ -2,6 +2,7 @@ import os
 import re
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 os.environ["BOT_TOKEN"] = "123456:TEST_TOKEN"
 os.environ["CHAT_ID"] = "1"
@@ -26,6 +27,17 @@ class AlertTests(unittest.TestCase):
 
         self.assertEqual([alert["level"] for alert in alerts], [3600, 3500, 3400])
         self.assertTrue(all("ETH" in alert["message"] for alert in alerts))
+
+    def test_failed_send_keeps_previous_price_for_retry(self):
+        bot.previous_prices.clear()
+        bot.previous_prices["BTC"] = 78050
+
+        with patch.object(bot, "get_crypto_price", side_effect=[77950, 3000]), patch.object(
+            bot, "send_telegram_message", return_value=False
+        ):
+            bot.check_price_and_alert()
+
+        self.assertEqual(bot.previous_prices["BTC"], 78050)
 
 
 if __name__ == "__main__":
