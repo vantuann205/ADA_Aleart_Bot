@@ -41,6 +41,15 @@ class AlertTests(unittest.TestCase):
         self.assertEqual([alert["level"] for alert in alerts], [78546, 79546])
         self.assertTrue(all("BTC" in alert["message"] for alert in alerts))
 
+    def test_alert_messages_use_clear_vietnamese_direction_icons(self):
+        up = bot.build_alert_messages("SOL", 1, 115.5, 115.5, 116.5)
+        down = bot.build_alert_messages("SOL", 1, 115.5, 115.5, 114.5)
+
+        self.assertIn("🟢⬆️", up[0]["message"])
+        self.assertIn("VƯỢT QUA MỐC", up[0]["message"])
+        self.assertIn("🔴⬇️", down[0]["message"])
+        self.assertIn("GIẢM XUỐNG DƯỚI MỐC", down[0]["message"])
+
     def test_relative_solana_alerts_follow_the_user_example(self):
         up_alerts = bot.build_alert_messages("SOL", 1, 115.5, 115.5, 118.5)
         down_alerts = bot.build_alert_messages("SOL", 1, 115.5, 118.5, 112.5)
@@ -67,6 +76,41 @@ class AlertTests(unittest.TestCase):
 
         self.assertEqual(bot.price_state["BTC"]["previous"], 78546)
 
+    def test_partial_delivery_advances_only_past_successful_levels(self):
+        bot.price_state.clear()
+        bot.price_state["SOL"] = {"anchor": 118.42, "previous": 118.42}
+        prices = [84000, 2500, 1.1, 116.36, 90]
+        sent = []
+
+        with patch.object(bot, "get_crypto_price", side_effect=prices), patch.object(
+            bot,
+            "send_telegram_message",
+            side_effect=lambda message: sent.append(message) or len(sent) == 1,
+        ):
+            bot.check_price_and_alert()
+
+        self.assertEqual(len(sent), 2)
+        self.assertAlmostEqual(bot.price_state["SOL"]["previous"], 117.42, places=8)
+
+    def test_next_poll_retries_only_the_unsent_level(self):
+        bot.price_state.clear()
+        bot.price_state["SOL"] = {"anchor": 118.42, "previous": 118.42}
+        prices = [84000, 2500, 1.1, 116.36, 90] * 2
+        sent = []
+        send_results = iter([True, False, True])
+
+        with patch.object(bot, "get_crypto_price", side_effect=prices), patch.object(
+            bot,
+            "send_telegram_message",
+            side_effect=lambda message: sent.append(message) or next(send_results),
+        ):
+            bot.check_price_and_alert()
+            bot.check_price_and_alert()
+
+        self.assertIn("$117.42", sent[0])
+        self.assertIn("$116.42", sent[1])
+        self.assertIn("$116.42", sent[2])
+        self.assertNotIn("$117.42", sent[2])
     def test_delivery_check_stops_startup_when_chat_cannot_receive_messages(self):
         with patch.object(bot, "send_telegram_message_async", new=AsyncMock(return_value=False)):
             with self.assertRaisesRegex(RuntimeError, "CHAT_ID"):
