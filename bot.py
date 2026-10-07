@@ -68,7 +68,7 @@ class HealthHandler(BaseHTTPRequestHandler):
                 <p><strong>Status:</strong> {status}</p>
                 <p><strong>Time (UTC+7):</strong> {current_time}</p>
                 <p><strong>Current Prices:</strong> {' | '.join(prices)}</p>
-                <p><strong>Alert Settings:</strong> BTC moi $1,000, ETH moi $100</p>
+                <p><strong>Alert Settings:</strong> BTC $1,000 | ETH $100 | SUI $0.10 | SOL $1 | HYPE $1</p>
             </body>
             </html>
             """
