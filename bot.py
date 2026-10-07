@@ -6,6 +6,7 @@ import schedule
 import threading
 import asyncio
 import sys
+from decimal import Decimal, ROUND_CEILING, ROUND_FLOOR
 from datetime import datetime, timezone, timedelta
 from telegram import Bot, Update
 from telegram.ext import Application, CommandHandler, ContextTypes
@@ -28,12 +29,15 @@ except ValueError as exc:
 SYMBOLS = {
     "BTC": {"step": 1000},
     "ETH": {"step": 100},
+    "SUI": {"step": 0.1},
+    "SOL": {"step": 1},
+    "HYPE": {"step": 1},
 }
 CHECK_INTERVAL = 30
 
 # Global state
 bot = Bot(token=BOT_TOKEN)
-previous_prices = {}
+price_state = {}
 is_running = True
 application = None
 
@@ -114,7 +118,9 @@ async def send_telegram_message_async(message):
 
 
 async def verify_telegram_delivery():
-    if not await send_telegram_message_async("🤖 Crypto Alert Bot is online. BTC/ETH monitoring started."):
+    if not await send_telegram_message_async(
+        "🤖 Crypto Alert Bot is online. BTC/ETH/SUI/SOL/HYPE monitoring started."
+    ):
         raise RuntimeError("Telegram delivery check failed: verify CHAT_ID and send /start to the bot")
     print("✅ Telegram alert delivery verified")
 
@@ -134,29 +140,45 @@ def send_telegram_message(message):
         return False
 
 
-def build_alert_messages(symbol, step, previous_price, current_price):
-    prev_step = int(previous_price // step)
-    curr_step = int(current_price // step)
+def format_price(price, step=None):
+    decimals = 4 if step is not None and step < 1 else 2
+    return f"{float(price):,.{decimals}f}"
+
+
+def build_alert_messages(symbol, step, anchor_price, previous_price, current_price):
+    step_decimal = Decimal(str(step))
+    anchor_decimal = Decimal(str(anchor_price))
+    previous_decimal = Decimal(str(previous_price))
+    current_decimal = Decimal(str(current_price))
+
+    def price_index(price):
+        delta = (price - anchor_decimal) / step_decimal
+        rounding = ROUND_FLOOR if delta >= 0 else ROUND_CEILING
+        return int(delta.to_integral_value(rounding=rounding))
+
+    previous_index = price_index(previous_decimal)
+    current_index = price_index(current_decimal)
     alerts = []
 
-    if curr_step > prev_step:
-        step_values = range(prev_step + 1, curr_step + 1)
-        template = "🚀 {symbol} TANG VUOT ${level:,.0f}!\n💰 Gia hien tai: ${price:,.2f}\n🕐 {time}"
-    elif curr_step < prev_step:
-        step_values = range(prev_step, curr_step, -1)
-        template = "🔥 {symbol} GIAM XUONG DUOI ${level:,.0f}!\n💰 Gia hien tai: ${price:,.2f}\n🕐 {time}"
+    if current_index > previous_index:
+        step_values = range(previous_index + 1, current_index + 1)
+        direction = "🚀 TANG"
+    elif current_index < previous_index:
+        step_values = range(previous_index, current_index - 1, -1)
+        direction = "🔥 GIAM"
     else:
         return alerts
 
     for step_value in step_values:
-        level = step_value * step
+        if step_value == 0:
+            continue
+        level = anchor_decimal + step_decimal * step_value
         alerts.append({
-            "level": level,
-            "message": template.format(
-                symbol=symbol,
-                level=level,
-                price=current_price,
-                time=get_utc7_time(),
+            "level": float(level),
+            "message": (
+                f"{direction} {symbol} qua moc ${format_price(level, step)}!\n"
+                f"💰 Gia hien tai: ${format_price(current_decimal, step)}\n"
+                f"🕐 {get_utc7_time()}"
             ),
         })
 
@@ -169,20 +191,29 @@ def check_price_and_alert():
         if price is None:
             continue
 
-        current_price = round(price, 2)
-        print(f"[{time.strftime('%H:%M:%S')}] Gia {symbol}: ${current_price:,.2f}")
+        current_price = float(price)
+        print(f"[{time.strftime('%H:%M:%S')}] Gia {symbol}: ${format_price(current_price, config['step'])}")
 
-        previous_price = previous_prices.get(symbol)
-        if previous_price is not None:
-            for alert in build_alert_messages(symbol, config["step"], previous_price, current_price):
-                if not send_telegram_message(alert["message"]):
-                    print(f"⚠️ Khong gui duoc thong bao {symbol}; se thu lai")
-                    break
-                print(f"✅ Thong bao {symbol}: ${alert['level']:,.0f}")
-            else:
-                previous_prices[symbol] = current_price
+        state = price_state.get(symbol)
+        if state is None:
+            price_state[symbol] = {"anchor": current_price, "previous": current_price}
+            print(f"📌 Moc ban dau {symbol}: ${format_price(current_price, config['step'])}")
+            continue
+
+        alerts = build_alert_messages(
+            symbol,
+            config["step"],
+            state["anchor"],
+            state["previous"],
+            current_price,
+        )
+        for alert in alerts:
+            if not send_telegram_message(alert["message"]):
+                print(f"⚠️ Khong gui duoc thong bao {symbol}; se thu lai")
+                break
+            print(f"✅ Thong bao {symbol}: ${format_price(alert['level'], config['step'])}")
         else:
-            previous_prices[symbol] = current_price
+            state["previous"] = current_price
 
 
 async def price_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -194,20 +225,23 @@ async def price_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         prices[symbol] = price
 
-    lines = [f"💰 Gia {symbol} hien tai: ${price:,.2f}" for symbol, price in prices.items()]
+    lines = [
+        f"💰 Gia {symbol} hien tai: ${format_price(price, SYMBOLS[symbol]['step'])}"
+        for symbol, price in prices.items()
+    ]
     lines.append(f"🕐 Thoi gian (UTC+7): {get_utc7_time()}")
     await update.message.reply_text("\n".join(lines))
 
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    message = "🤖 Crypto Price Alert Bot\n\n📋 Lenh co san:\n/price - Xem gia BTC va ETH hien tai\n\n🔔 Tu dong thong bao khi BTC vuot moi $1,000 va ETH vuot moi $100"
+    message = "🤖 Crypto Price Alert Bot\n\n📋 Lenh co san:\n/price - Xem gia 5 coin hien tai\n\n🔔 Moc: BTC $1,000 | ETH $100 | SUI $0.10 | SOL $1 | HYPE $1\n📌 Moc dau moi coin lay luc bot khoi dong."
     await update.message.reply_text(message)
 
 
 def price_monitoring():
     """Price monitoring loop running in separate thread"""
     print("🚀 Starting price monitoring...")
-    print("📊 Alert steps: BTC $1,000 | ETH $100")
+    print("📊 Alert steps: BTC $1,000 | ETH $100 | SUI $0.10 | SOL $1 | HYPE $1")
     print(f"⏱️  Check interval: {CHECK_INTERVAL} seconds\n")
 
     check_price_and_alert()

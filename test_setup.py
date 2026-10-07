@@ -62,7 +62,7 @@ def test_api_connection():
     """Test if Coinbase price API is reachable"""
     try:
         import requests
-        for symbol in ("BTC", "ETH"):
+        for symbol in ("BTC", "ETH", "SUI", "SOL", "HYPE"):
             response = requests.get(
                 f"https://api.coinbase.com/v2/prices/{symbol}-USD/spot",
                 timeout=5

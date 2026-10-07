@@ -5,13 +5,16 @@
 [![Deploy on Render](https://img.shields.io/badge/Deploy-Render-46E3B7?logo=render&logoColor=black)](https://render.com/)
 [![License](https://img.shields.io/badge/License-Proprietary-lightgrey)](#license)
 
-A lightweight Telegram bot that monitors BTC and ETH spot prices and sends alerts when price levels are crossed.
+A lightweight Telegram bot that monitors BTC, ETH, SUI, SOL, and HYPE spot prices and sends alerts when relative price levels are crossed.
 
 ## Alerts
 
-- BTC: sends an alert every time price crosses a 1,000 USD level.
-- ETH: sends an alert every time price crosses a 100 USD level.
-- Both upward and downward crossings are supported.
+- BTC: alerts every `$1,000` move.
+- ETH: alerts every `$100` move.
+- SUI: alerts every `$0.10` move.
+- SOL: alerts every `$1` move.
+- HYPE: alerts every `$1` move.
+- Each coin is anchored to its first successful price after deployment. Alerts work upward and downward and include every crossed level.
 
 ## Requirements
 

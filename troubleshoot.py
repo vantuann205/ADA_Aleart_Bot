@@ -61,7 +61,7 @@ def check_chat_id(chat_id):
 def check_price_api():
     """Test Coinbase price API availability"""
     try:
-        for symbol in ("BTC", "ETH"):
+        for symbol in ("BTC", "ETH", "SUI", "SOL", "HYPE"):
             url = f"https://api.coinbase.com/v2/prices/{symbol}-USD/spot"
             response = requests.get(url, timeout=5)
             response.raise_for_status()
