@@ -6,7 +6,7 @@ import schedule
 import threading
 import asyncio
 import sys
-from decimal import Decimal, ROUND_CEILING, ROUND_FLOOR
+from decimal import Decimal, ROUND_FLOOR
 from datetime import datetime, timezone, timedelta
 from telegram import Bot, Update
 from telegram.ext import Application, CommandHandler, ContextTypes
@@ -142,48 +142,65 @@ def format_price(price, step=None):
     return f"{float(price):,.{decimals}f}"
 
 
-def price_index(anchor_price, step, price):
+def format_level(level, step):
+    """Format an absolute alert level without noisy trailing decimals."""
+    decimals = 2 if step < 1 else 0
+    return f"{float(level):,.{decimals}f}"
+
+
+def price_index(step, price):
+    """Return the absolute step bucket containing price."""
     step_decimal = Decimal(str(step))
-    anchor_decimal = Decimal(str(anchor_price))
     price_decimal = Decimal(str(price))
-    delta = (price_decimal - anchor_decimal) / step_decimal
-    rounding = ROUND_FLOOR if delta >= 0 else ROUND_CEILING
-    return int(delta.to_integral_value(rounding=rounding))
+    return int((price_decimal / step_decimal).to_integral_value(rounding=ROUND_FLOOR))
 
 
 def build_alert_messages(
     symbol,
     step,
-    anchor_price,
     previous_price,
     current_price,
     previous_direction=None,
+    previous_is_alert=False,
 ):
-    anchor_decimal = Decimal(str(anchor_price))
     step_decimal = Decimal(str(step))
+    previous_decimal = Decimal(str(previous_price))
     current_decimal = Decimal(str(current_price))
-    previous_index = price_index(anchor_price, step, previous_price)
-    current_index = price_index(anchor_price, step, current_price)
+    previous_index = price_index(step, previous_price)
+    current_index = price_index(step, current_price)
     alerts = []
 
-    if current_index > previous_index:
-        step_values = range(previous_index + 1, current_index + 1)
+    if current_decimal > previous_decimal:
+        # Do not alert when arriving exactly on a level. Alert when leaving
+        # an exact level upward, unless that level was already sent.
+        start_index = previous_index + 1
+        if previous_decimal == step_decimal * previous_index and (
+            not previous_is_alert or previous_direction != "up"
+        ):
+            start_index = previous_index
+        end_index = current_index - 1 if current_decimal == step_decimal * current_index else current_index
+        step_values = range(start_index, end_index + 1)
         direction = "🟢⬆️ VƯỢT QUA MỐC"
-    elif current_index < previous_index:
-        start_index = previous_index if previous_direction != "down" else previous_index - 1
-        step_values = range(start_index, current_index - 1, -1)
+    elif current_decimal < previous_decimal:
+        # Do not alert when arriving exactly on a level. Alert when leaving
+        # an exact level downward, unless that level was already sent.
+        start_index = (
+            previous_index - 1
+            if previous_is_alert and previous_direction == "down"
+            else previous_index
+        )
+        lowest_index = current_index + 1
+        step_values = range(start_index, lowest_index - 1, -1)
         direction = "🔴⬇️ GIẢM XUỐNG DƯỚI MỐC"
     else:
         return alerts
 
     for step_value in step_values:
-        if step_value == 0:
-            continue
-        level = anchor_decimal + step_decimal * step_value
+        level = step_decimal * step_value
         alerts.append({
             "level": float(level),
             "message": (
-                f"{direction} ${format_price(level, step)} — {symbol}!\n"
+                f"{direction} ${format_level(level, step)} — {symbol}!\n"
                 f"💰 Giá hiện tại: ${format_price(current_decimal, step)}\n"
                 f"🕐 {get_utc7_time()}"
             ),
@@ -205,35 +222,24 @@ def check_price_and_alert():
             state = price_state.get(symbol)
             if state is None:
                 price_state[symbol] = {
-                    "anchor": current_price,
                     "previous": current_price,
                     "direction": None,
                 }
-                print(f"📌 Mốc ban đầu {symbol}: ${format_price(current_price, config['step'])}")
+                print(f"📌 Giá khởi tạo {symbol}: ${format_price(current_price, config['step'])}")
                 continue
 
-            previous_index = price_index(
-                state["anchor"],
-                config["step"],
-                state["previous"],
-            )
-            current_index = price_index(
-                state["anchor"],
-                config["step"],
-                current_price,
-            )
             movement = (
-                "up" if current_index > previous_index
-                else "down" if current_index < previous_index
+                "up" if current_price > state["previous"]
+                else "down" if current_price < state["previous"]
                 else state.get("direction")
             )
             alerts = build_alert_messages(
                 symbol,
                 config["step"],
-                state["anchor"],
                 state["previous"],
                 current_price,
                 state.get("direction"),
+                state.get("previous_is_alert", False),
             )
             for alert in alerts:
                 if not send_telegram_message(alert["message"]):
@@ -241,10 +247,12 @@ def check_price_and_alert():
                     break
                 state["previous"] = alert["level"]
                 state["direction"] = movement
+                state["previous_is_alert"] = True
                 print(f"✅ Đã thông báo {symbol}: ${format_price(alert['level'], config['step'])}")
             else:
                 state["previous"] = current_price
                 state["direction"] = movement
+                state["previous_is_alert"] = False
 
 
 async def price_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -265,7 +273,7 @@ async def price_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    message = "🤖 Bot cảnh báo giá crypto\n\n📋 Lệnh có sẵn:\n/price - Xem giá 5 coin hiện tại\n\n🔔 Mốc: BTC $1,000 | ETH $100 | SUI $0.10 | SOL $1 | HYPE $1\n📌 Mốc đầu mỗi coin được lấy lúc bot khởi động."
+    message = "🤖 Bot cảnh báo giá crypto\n\n📋 Lệnh có sẵn:\n/price - Xem giá 5 coin hiện tại\n\n🔔 Mốc tuyệt đối: BTC mỗi $1,000 | ETH mỗi $100 | SUI mỗi $0.10 | SOL mỗi $1 | HYPE mỗi $1\n📌 Chỉ báo khi giá vượt qua hoặc giảm xuống dưới mốc số tròn."
     await update.message.reply_text(message)
 
 
