@@ -79,8 +79,10 @@ class AlertTests(unittest.TestCase):
         up = bot.build_alert_messages("SOL", 1, 115.4, 116.6)
         down = bot.build_alert_messages("SOL", 1, 116.6, 115.4)
 
-        self.assertIn("🟢⬆️ VƯỢT QUA MỐC $116 — SOL!", up[0]["message"])
-        self.assertIn("🔴⬇️ GIẢM XUỐNG DƯỚI MỐC $116 — SOL!", down[0]["message"])
+        self.assertIn("🟢 SOL đã vượt qua mốc $116!", up[0]["message"])
+        self.assertIn("🔴 SOL đã giảm dưới mốc $116!", down[0]["message"])
+        self.assertNotIn("⬆️", up[0]["message"])
+        self.assertNotIn("⬇️", down[0]["message"])
         self.assertIn("Giá hiện tại:", up[0]["message"])
 
     def test_failed_send_keeps_previous_price_for_retry(self):

@@ -180,7 +180,7 @@ def build_alert_messages(
             start_index = previous_index
         end_index = current_index - 1 if current_decimal == step_decimal * current_index else current_index
         step_values = range(start_index, end_index + 1)
-        direction = "🟢⬆️ VƯỢT QUA MỐC"
+        direction = f"🟢 {symbol} đã vượt qua mốc"
     elif current_decimal < previous_decimal:
         # Do not alert when arriving exactly on a level. Alert when leaving
         # an exact level downward, unless that level was already sent.
@@ -191,7 +191,7 @@ def build_alert_messages(
         )
         lowest_index = current_index + 1
         step_values = range(start_index, lowest_index - 1, -1)
-        direction = "🔴⬇️ GIẢM XUỐNG DƯỚI MỐC"
+        direction = f"🔴 {symbol} đã giảm dưới mốc"
     else:
         return alerts
 
@@ -200,7 +200,7 @@ def build_alert_messages(
         alerts.append({
             "level": float(level),
             "message": (
-                f"{direction} ${format_level(level, step)} — {symbol}!\n"
+                f"{direction} ${format_level(level, step)}!\n"
                 f"💰 Giá hiện tại: ${format_price(current_decimal, step)}\n"
                 f"🕐 {get_utc7_time()}"
             ),
