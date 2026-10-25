@@ -22,7 +22,7 @@ class AlertTests(unittest.TestCase):
     def test_all_requested_symbols_have_expected_steps(self):
         self.assertEqual(
             {symbol: config["step"] for symbol, config in bot.SYMBOLS.items()},
-            {"BTC": 1000, "ETH": 100, "SUI": 0.1, "SOL": 1, "HYPE": 1},
+            {"BTC": 1000, "ETH": 100, "SUI": 0.02, "SOL": 1, "HYPE": 1},
         )
 
     def test_alerts_use_absolute_round_levels_for_all_coins(self):

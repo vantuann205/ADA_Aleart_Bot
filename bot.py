@@ -29,7 +29,7 @@ except ValueError as exc:
 SYMBOLS = {
     "BTC": {"step": 1000},
     "ETH": {"step": 100},
-    "SUI": {"step": 0.1},
+    "SUI": {"step": 0.02},
     "SOL": {"step": 1},
     "HYPE": {"step": 1},
 }
@@ -69,7 +69,7 @@ class HealthHandler(BaseHTTPRequestHandler):
                 <p><strong>Status:</strong> {status}</p>
                 <p><strong>Time (UTC+7):</strong> {current_time}</p>
                 <p><strong>Current Prices:</strong> {' | '.join(prices)}</p>
-                <p><strong>Alert Settings:</strong> BTC $1,000 | ETH $100 | SUI $0.10 | SOL $1 | HYPE $1</p>
+                <p><strong>Alert Settings:</strong> BTC $1,000 | ETH $100 | SUI $0.02 | SOL $1 | HYPE $1</p>
             </body>
             </html>
             """
@@ -273,14 +273,14 @@ async def price_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    message = "🤖 Bot cảnh báo giá crypto\n\n📋 Lệnh có sẵn:\n/price - Xem giá 5 coin hiện tại\n\n🔔 Mốc tuyệt đối: BTC mỗi $1,000 | ETH mỗi $100 | SUI mỗi $0.10 | SOL mỗi $1 | HYPE mỗi $1\n📌 Chỉ báo khi giá vượt qua hoặc giảm xuống dưới mốc số tròn."
+    message = "🤖 Bot cảnh báo giá crypto\n\n📋 Lệnh có sẵn:\n/price - Xem giá 5 coin hiện tại\n\n🔔 Mốc tuyệt đối: BTC mỗi $1,000 | ETH mỗi $100 | SUI mỗi $0.02 | SOL mỗi $1 | HYPE mỗi $1\n📌 Chỉ báo khi giá vượt qua hoặc giảm xuống dưới mốc số tròn."
     await update.message.reply_text(message)
 
 
 def price_monitoring():
     """Price monitoring loop running in separate thread"""
     print("🚀 Starting price monitoring...")
-    print("📊 Alert steps: BTC $1,000 | ETH $100 | SUI $0.10 | SOL $1 | HYPE $1")
+    print("📊 Alert steps: BTC $1,000 | ETH $100 | SUI $0.02 | SOL $1 | HYPE $1")
     print(f"⏱️  Check interval: {CHECK_INTERVAL} seconds\n")
 
     check_price_and_alert()

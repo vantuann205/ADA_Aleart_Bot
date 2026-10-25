@@ -11,7 +11,7 @@ A lightweight Telegram bot that monitors BTC, ETH, SUI, SOL, and HYPE spot price
 
 - BTC: alerts at every `$1,000` level (`$82,000`, `$83,000`, `$84,000`, ...).
 - ETH: alerts at every `$100` level.
-- SUI: alerts at every `$0.10` level.
+- SUI: alerts at every `$0.02` level.
 - SOL: alerts at every `$1` level.
 - HYPE: alerts at every `$1` level (`$88`, `$89`, `$90`, ...).
 - Levels are absolute and have no upper or lower limit.
